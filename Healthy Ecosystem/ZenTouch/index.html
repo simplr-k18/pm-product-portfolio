@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zen Touch</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+            background: linear-gradient(135deg, #0f172a, #1e293b, #334155);
+            -webkit-user-select: none; /* Safari */
+            -moz-user-select: none; /* Firefox */
+            -ms-user-select: none; /* IE10+/Edge */
+            user-select: none; /* Standard */
+            transition: background 0.8s ease;
+        }
+        canvas {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+        .content {
+            position: relative;
+            z-index: 2;
+            color: rgba(255, 255, 255, 0.6);
+            text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+            transition: color 0.8s ease;
+        }
+        /* Settings panel styles */
+        #settings-icon {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 100;
+            cursor: pointer;
+            color: rgba(255, 255, 255, 0.7);
+            transition: transform 0.3s ease;
+        }
+        #settings-icon:hover {
+            transform: scale(1.1) rotate(20deg);
+        }
+        #settings-panel {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            z-index: 90;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.4s ease, visibility 0.4s ease;
+        }
+        #settings-panel.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+        .settings-modal {
+            background-color: #1e293b;
+            padding: 2rem;
+            border-radius: 1rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+            color: white;
+        }
+    </style>
+</head>
+<body class="w-screen h-screen m-0 p-0 flex items-center justify-center">
+
+    <!-- Canvas for the ripple effect -->
+    <canvas id="rippleCanvas"></canvas>
+
+    <!-- Content overlay -->
+    <div class="content text-center">
+        <h1 class="text-4xl md:text-6xl font-light tracking-wider">Zen Touch</h1>
+        <p class="mt-4 text-lg md:text-xl font-thin" id="instructionText">Touch or drag on the screen to create ripples.</p>
+        <p class="mt-2 text-sm md:text-base font-thin" id="soundHint">Click to enable sound.</p>
+    </div>
+
+    <!-- Settings Icon -->
+    <div id="settings-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="currentColor" class="bi bi-gear-fill" viewBox="0 0 16 16">
+            <path d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 1 .872-2.105l.34-.1c1.4-.413-1.4-2.397 0-2.81l-.34-.1a1.464 1.464 0 0 1-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 0 1-2.105-.872l-.1-.34zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.858z"/>
+        </svg>
+    </div>
+
+    <!-- Settings Panel -->
+    <div id="settings-panel">
+        <div class="settings-modal text-center">
+            <h2 class="text-2xl font-light mb-6">Choose a Theme</h2>
+            <div class="flex gap-4">
+                <button class="theme-btn px-4 py-2 rounded-lg bg-slate-600 hover:bg-slate-500 transition" data-theme="midnight">Midnight</button>
+                <button class="theme-btn px-4 py-2 rounded-lg bg-rose-400 hover:bg-rose-300 transition" data-theme="sunrise">Sunrise</button>
+                <button class="theme-btn px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 transition" data-theme="forest">Forest</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('rippleCanvas');
+        const ctx = canvas.getContext('2d');
+        const instructionText = document.getElementById('instructionText');
+        const soundHint = document.getElementById('soundHint');
+        const settingsIcon = document.getElementById('settings-icon');
+        const settingsPanel = document.getElementById('settings-panel');
+        const themeButtons = document.querySelectorAll('.theme-btn');
+        const contentDiv = document.querySelector('.content');
+
+        let ripples = [];
+        let isMouseDown = false;
+        let soundEnabled = false;
+
+        // --- Theme Management ---
+        const themes = {
+            midnight: {
+                name: 'Midnight',
+                background: 'linear-gradient(135deg, #0f172a, #1e293b, #334155)',
+                rippleHue: 190,
+                textColor: 'rgba(255, 255, 255, 0.6)'
+            },
+            sunrise: {
+                name: 'Sunrise',
+                background: 'linear-gradient(135deg, #fbc2eb 0%, #a6c1ee 100%)',
+                rippleHue: 280,
+                textColor: 'rgba(255, 255, 255, 0.8)'
+            },
+            forest: {
+                name: 'Forest',
+                background: 'linear-gradient(135deg, #2d382c, #3e5142, #5a7a66)',
+                rippleHue: 100,
+                textColor: 'rgba(255, 255, 255, 0.7)'
+            }
+        };
+        let currentTheme = 'midnight';
+
+        function setTheme(themeName) {
+            if (!themes[themeName]) return;
+            currentTheme = themeName;
+            const theme = themes[themeName];
+            document.body.style.background = theme.background;
+            contentDiv.style.color = theme.textColor;
+            settingsIcon.style.color = theme.textColor; // Match icon color
+            settingsPanel.classList.remove('visible'); // Hide panel after selection
+        }
+
+        // --- Sound Synthesis with Tone.js ---
+        const synth = new Tone.PolySynth(Tone.Synth, { oscillator: { type: 'sine' }, envelope: { attack: 0.01, decay: 0.2, sustain: 0.1, release: 0.8 }, volume: -12 }).toDestination();
+        const reverb = new Tone.Reverb({ decay: 5, wet: 0.5 }).toDestination();
+        synth.connect(reverb);
+        const scale = ['C3', 'E3', 'G3', 'A3', 'C4', 'D4', 'E4', 'G4', 'A4'];
+
+        function playSound() {
+            if (soundEnabled) {
+                const note = scale[Math.floor(Math.random() * scale.length)];
+                synth.triggerAttackRelease(note, '8n');
+            }
+        }
+
+        // --- Ripple Creation ---
+        class Ripple {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.radius = 1;
+                this.maxRadius = 150 + Math.random() * 50;
+                this.opacity = 1;
+                this.speed = 1.5;
+                this.lineWidth = 1 + Math.random() * 1.5;
+                this.updateColor();
+            }
+
+            updateColor() {
+                const themeHue = themes[currentTheme].rippleHue;
+                this.color = `hsla(${themeHue + Math.random() * 40}, 100%, 75%, ${this.opacity})`;
+            }
+
+            update() {
+                this.radius += this.speed;
+                if (this.radius > this.maxRadius * 0.2) {
+                    this.opacity -= 0.01;
+                }
+                if (this.opacity < 0) this.opacity = 0;
+                this.updateColor();
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = this.lineWidth;
+                ctx.stroke();
+                ctx.closePath();
+            }
+        }
+
+        function createRipple(x, y) {
+            ripples.push(new Ripple(x, y));
+            playSound();
+        }
+
+        // --- Animation Loop ---
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            for (let i = ripples.length - 1; i >= 0; i--) {
+                const ripple = ripples[i];
+                ripple.update();
+                ripple.draw();
+                if (ripple.opacity <= 0) {
+                    ripples.splice(i, 1);
+                }
+            }
+            requestAnimationFrame(animate);
+        }
+
+        // --- Event Handlers ---
+        function setCanvasSize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+
+        function handleStart(e) {
+            if (!soundEnabled) {
+                Tone.start();
+                soundEnabled = true;
+                soundHint.style.display = 'none';
+            }
+            isMouseDown = true;
+            instructionText.style.opacity = '0'; 
+            const coords = getEventCoordinates(e);
+            createRipple(coords.x, coords.y);
+        }
+
+        function handleMove(e) {
+            if (isMouseDown) {
+                 const coords = getEventCoordinates(e);
+                 createRipple(coords.x, coords.y);
+            }
+        }
+
+        function handleEnd() {
+            isMouseDown = false;
+        }
+
+        function getEventCoordinates(e) {
+             if (e.touches) {
+                return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+            }
+            return { x: e.clientX, y: e.clientY };
+        }
+
+        // --- Initial Setup ---
+        window.addEventListener('resize', setCanvasSize);
+        canvas.addEventListener('mousedown', handleStart);
+        canvas.addEventListener('mousemove', handleMove);
+        window.addEventListener('mouseup', handleEnd);
+        canvas.addEventListener('touchstart', handleStart);
+        canvas.addEventListener('touchmove', handleMove);
+        window.addEventListener('touchend', handleEnd);
+
+        settingsIcon.addEventListener('click', () => {
+            settingsPanel.classList.toggle('visible');
+        });
+
+        settingsPanel.addEventListener('click', (e) => {
+            // Close panel if clicking on the background
+            if (e.target === settingsPanel) {
+                settingsPanel.classList.remove('visible');
+            }
+        });
+
+        themeButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const themeName = button.dataset.theme;
+                setTheme(themeName);
+            });
+        });
+
+        setCanvasSize();
+        animate();
+    </script>
+</body>
+</html>
